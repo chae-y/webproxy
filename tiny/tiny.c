@@ -32,7 +32,7 @@ int main(int argc, char **argv) {
   while (1) {//전형적인 무한 서버 루프를 실행하고
     clientlen = sizeof(clientaddr);
     connfd = Accept(listenfd, (SA *)&clientaddr, &clientlen);  // line:netp:tiny:accept
-    Getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
+    Getnameinfo((SA *) &clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
     printf("Accepted connection from (%s, %s)\n", hostname, port);
     doit(connfd);   // line:netp:tiny:doit 반복적인 트랜잭션을 수행하고
     Close(connfd);  // line:netp:tiny:close 자신 쪽의 연결을 닫는다
@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
 
 void doit(int fd){
   int is_static;
-  struct stat sbuf;
+  struct stat sbuf;//?
   char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
   char filename[MAXLINE], cgiargs[MAXLINE];
   rio_t rio;
@@ -51,7 +51,7 @@ void doit(int fd){
   Rio_readinitb(&rio, fd);
   Rio_readlineb(&rio, buf, MAXLINE);
   printf("Request headers:\n");
-  printf("%s",buf);
+  printf("%s", buf);
   sscanf(buf, "%s %s %s", method, uri, version);
   if(strcasecmp(method, "GET")){ //겟만 지원 strcasecmp->string 비교 같을 때 0이다.
     clienterror(fd, method, "501", "Not implemented", "Tiny does not implement this method");
@@ -117,7 +117,7 @@ int parse_uri(char *uri, char *filename, char *cgiargs){
       strcpy(cgiargs, ptr+1);
       *ptr = '\0';
     }else{
-      strcpy(cgiargs, ".");
+      strcpy(cgiargs, "");
     }
     //나머지 uri부분을 상대 리눅스 파일 이름으로 변환한다.
     strcpy(filename, ".");
@@ -138,7 +138,7 @@ void serve_static(int fd, char *filename, int filesize){
   sprintf(buf, "HTTP/1.0 200 OK\r\n");
   sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
   sprintf(buf, "%sConnection: close\r\n", buf);
-  sprintf(buf, "%sContent-length: %d\r\n\r\n", buf);
+  sprintf(buf, "%sContent-length: %d\r\n", buf);
   sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype);
   Rio_writen(fd, buf, strlen(buf));
   printf("Response headers:\n");
@@ -205,17 +205,17 @@ void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longms
 
   //Build the HTTP response body
   sprintf(body, "<html><title>Tiny Error</title>");
-  sprintf(body, "%s<body bgcolor=""ffffff""<\r\n", body);
+  sprintf(body, "%s<body bgcolor=""ffffff"">\r\n", body);
   sprintf(body, "%s%s: %s\r\n", body, errnum, shortmsg);
   sprintf(body, "%s<p>%s: %s\r\n", body, longmsg, cause);
   sprintf(body, "%s<hr><em>The Tiny Web server</em>\r\n", body);
 
   //Print the HTTP response
-  sprintf(buf, "HTTP/1.0 %s $s\r\n, errnum, shortmsg");
+  sprintf(buf, "HTTP/1.0 %s $s\r\n", errnum, shortmsg);
   Rio_writen(fd, buf, strlen(buf));
   sprintf(buf, "Content-type: text/html\r\n");
   Rio_writen(fd, buf, strlen(buf));
-  sprintf(buf, "Content-type: %d\r\n\r\n", (int)strlen(body));
+  sprintf(buf, "Content-length: %d\r\n\r\n", (int)strlen(body));
   Rio_writen(fd, buf, strlen(buf));
   Rio_writen(fd, body, strlen(body));
 }
