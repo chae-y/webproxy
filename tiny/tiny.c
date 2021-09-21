@@ -39,7 +39,6 @@ int main(int argc, char **argv) {
   }
 }
 
-
 void doit(int fd){
   int is_static;
   struct stat sbuf;//?
@@ -138,7 +137,7 @@ void serve_static(int fd, char *filename, int filesize){
   sprintf(buf, "HTTP/1.0 200 OK\r\n");
   sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
   sprintf(buf, "%sConnection: close\r\n", buf);
-  sprintf(buf, "%sContent-length: %d\r\n", buf);
+  sprintf(buf, "%sContent-length: %d\r\n", buf, filesize);
   sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype);
   Rio_writen(fd, buf, strlen(buf));
   printf("Response headers:\n");
@@ -147,17 +146,25 @@ void serve_static(int fd, char *filename, int filesize){
 
   //Send response body to client
   srcfd = Open(filename, O_RDONLY, 0); //읽기 위해서 filename을 오픈하고, 식별자를 얻어온다
-  srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0); //리눅스 mmap함수는 요청한 파일을 가상 메모리 영역으로 매핑한다
+  // srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0); //리눅스 mmap함수는 요청한 파일을 가상 메모리 영역으로 매핑한다
+  srcp = malloc(filesize);
+  Rio_readn(srcfd, srcp, filesize);
+
   Close(srcfd);//이 파일을 닫는다. 이렇게 하지 않으면 치명적일 수 있는 메모리 누수가 발생할 수 있다
   Rio_writen(fd, srcp, filesize); // 실제로 파일을 클라이언트에게 전송한다.
   //Rio_writen함수는 주소 srcp에서 시작하는 filesize바이트를 클라이언트에게 연결식별자로 복사한다.
-  Munmap(srcp, filesize);// 매핑된 가상메모리 주소를 반환한다.
+  // Munmap(srcp, filesize);// 매핑된 가상메모리 주소를 반환한다.
+  free(srcp);
 }
 
 //Derive file type from filename
 void get_filetype(char *filename, char *filetype){
   if(strstr(filename, ".html")){
     strcpy(filetype, "text/html");
+  }else if(strstr(filename, ".mpg")){
+    strcpy(filetype, "video/mpeg");//mpg인지 둘중에 모르겠는데 둘다 안돼
+  }else if(strstr(filename, ".mp4")){
+    strcpy(filetype, "video/mp4");
   }else if(strstr(filename, ".gif")){
     strcpy(filetype, "image/gif");
   }else if(strstr(filename, ".png")){
