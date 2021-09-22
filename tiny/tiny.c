@@ -11,7 +11,7 @@
 void doit(int fd);
 void read_requesthdrs(rio_t *rp);
 int parse_uri(char *uri, char *filename, char *cgiargs);
-void serve_static(int fd, char *filename, int filesize);
+void serve_static(int fd, char *filename, int filesize, char *method);
 void get_filetype(char *filename, char *filetype);
 void serve_dynamic(int fd, char *filename, char *cgiargs);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
@@ -52,7 +52,7 @@ void doit(int fd){
   printf("Request headers:\n");
   printf("%s", buf);
   sscanf(buf, "%s %s %s", method, uri, version);
-  if(strcasecmp(method, "GET")){ //겟만 지원 strcasecmp->string 비교 같을 때 0이다.
+  if(strcasecmp(method, "GET") && strcasecmp(method, "HEAD")){ //겟만 지원 strcasecmp->string 비교 같을 때 0이다.
     clienterror(fd, method, "501", "Not implemented", "Tiny does not implement this method");
     return;
   }
@@ -72,7 +72,7 @@ void doit(int fd){
       clienterror(fd, filename, "403", "Forbidden", "Tiny couldn't read the file");
       return;
     }
-    serve_static(fd, filename, sbuf.st_size);//컨텐츠를 클라이언트에게 제공
+    serve_static(fd, filename, sbuf.st_size, method);//컨텐츠를 클라이언트에게 제공
   }else{// Serve dynamic content
     if(!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)){ //이 파일이 실행가능한지 확인
       clienterror(fd, filename, "403", "Forbidden", "Tiny couldn't run the CGI program");
@@ -127,7 +127,7 @@ int parse_uri(char *uri, char *filename, char *cgiargs){
 
 //5개의 서로 다른 정적컨텐츠 지원 (HTML 파일, 무형식 텍스트파일, GIF, PNG, JPEG로 인코딩된 영상)
 //지역파일의 내용을 포함하고 있는 본체를 갖는 HTTP 응답을 보낸다
-void serve_static(int fd, char *filename, int filesize){
+void serve_static(int fd, char *filename, int filesize, char *method){
   int srcfd;
   char *srcp, filetype[MAXLINE], buf[MAXBUF];
 
@@ -144,6 +144,9 @@ void serve_static(int fd, char *filename, int filesize){
   printf("%s", buf);
   //빈줄 한개가 헤더를 종료하고 있다는 점에 주목해야한다
 
+  if(!strcasecmp(method, "HEAD")){
+    return;
+  }
   //Send response body to client
   srcfd = Open(filename, O_RDONLY, 0); //읽기 위해서 filename을 오픈하고, 식별자를 얻어온다
   // srcp = Mmap(0, filesize, PROT_READ, MAP_PRIVATE, srcfd, 0); //리눅스 mmap함수는 요청한 파일을 가상 메모리 영역으로 매핑한다
@@ -192,12 +195,12 @@ void serve_dynamic(int fd, char *filename, char *cgiargs){
   // 새로운 자식 프로세스를 포크한다
   if(Fork() == 0){//child
     //Real server woudl set all CGI vars here
-    setenv("QUERY_STRING", cgiargs, 1);// 자식은 QUERY_STRING 환경변수를 요청 URI의 CGI 인자들로 추기화 한다
+    setenv("QUERY_STRING", cgiargs, 1);// 자식은 QUERY_STRING 환경변수를 요청 URI의 CGI 인자들로 초기화 한다
     //실제 서버는 여기서 다른 CGI 환경변수들도 마찬가지로 설정한다는 점에 유의하라. 단순성을 위해 이 단계는 생각했다
     Dup2(fd, STDOUT_FILENO); // Redirect stdout to client 자식은 자식의 표준 출력을 연결파일 식별자로 재지정하고
     Execve(filename, emptylist, environ); // Run CGI program CGI 프롤그램을 로드하고 실행한다.
     //CGI 프로그램이 자식 컨텍스트에서 실행되기 때문에 execve함수를 호출하기 전에 존재하던 열린 파일들과 환경변수들에도 동일하게 접근 할 수 있다.
-    //그래서 CGI프로그램이 표준 출력에 쓰는 모든 것은 직접 클라이언트 프로세스로 부모 프로세스의 어떠 ㄴ간섭도 없이 전달된다
+    //그래서 CGI프로그램이 표준 출력에 쓰는 모든 것은 직접 클라이언트 프로세스로 부모 프로세스의 어떤 간섭도 없이 전달된다
   }
   //한편 부모는 자식이 종료되어 정리되는 것을 기다리기 위해 wait함수에서 블록된다
   Wait(NULL); //Parent waits for and reaps child
